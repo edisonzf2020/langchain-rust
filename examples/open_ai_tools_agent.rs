@@ -1,14 +1,10 @@
-use std::{error::Error, sync::Arc};
+use std::{error::Error, sync::Arc, env};
 
 use async_trait::async_trait;
 use langchain_rust::{
-    agent::{AgentExecutor, OpenAiToolAgentBuilder},
-    chain::{options::ChainCallOptions, Chain},
-    llm::openai::OpenAI,
-    memory::SimpleMemory,
-    prompt_args,
-    tools::{CommandExecutor, DuckDuckGoSearchResults, SerpApi, Tool},
+    agent::{AgentExecutor, OpenAiToolAgentBuilder}, chain::{options::ChainCallOptions, Chain}, language_models::llm, llm::openai::OpenAI, memory::SimpleMemory, prompt_args, tools::{CommandExecutor, DuckDuckGoSearchResults, SerpApi, Tool}
 };
+use langchain_rust::llm::OpenAIConfig;
 
 use serde_json::Value;
 struct Date {}
@@ -28,7 +24,17 @@ impl Tool for Date {
 
 #[tokio::main]
 async fn main() {
-    let llm = OpenAI::default();
+    // let llm = OpenAI::default();
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let base_url = env::var("OPENAI_API_BASE").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
+    //or we can set config as
+    let llm = OpenAI::default().with_config(
+        OpenAIConfig::default()
+            .with_api_base(base_url) //if you want to specify base url
+            .with_api_key(api_key), //if you want to set you open ai key,
+    )
+    .with_model("deepseek-ai/DeepSeek-V2-Chat");
     let memory = SimpleMemory::new();
     let serpapi_tool = SerpApi::default();
     let duckduckgo_tool = DuckDuckGoSearchResults::default();
@@ -48,7 +54,7 @@ async fn main() {
     let executor = AgentExecutor::from_agent(agent).with_memory(memory.into());
 
     let input_variables = prompt_args! {
-        "input" => "What the name of the current dir, And what date is today",
+        "input" => "当前文件目录的名称是什么，今天是几号",
     };
 
     match executor.invoke(input_variables).await {

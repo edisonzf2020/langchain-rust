@@ -35,22 +35,27 @@ pub struct Claude {
     options: CallOptions,
     api_key: String,
     anthropic_version: String,
+    api_url: String,
 }
 
 impl Default for Claude {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to create default Claude instance")
     }
 }
 
 impl Claude {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, LLMError> {
+        let api_url = std::env::var("ANTHROPIC_API_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+
+        Ok(Self {
             model: ClaudeModel::Claude3pus20240229.to_string(),
             options: CallOptions::default(),
-            api_key: std::env::var("CLAUDE_API_KEY").unwrap_or_default(),
+            api_key: std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
             anthropic_version: "2023-06-01".to_string(),
-        }
+            api_url: format!("{}/v1/messages", api_url),
+        })
     }
 
     pub fn with_model<S: Into<String>>(mut self, model: S) -> Self {
@@ -68,6 +73,11 @@ impl Claude {
         self
     }
 
+    pub fn with_api_url<S: Into<String>>(mut self, api_url: S) -> Self {
+        self.api_url = api_url.into();
+        self
+    }
+
     pub fn with_anthropic_version<S: Into<String>>(mut self, version: S) -> Self {
         self.anthropic_version = version.into();
         self
@@ -79,7 +89,7 @@ impl Claude {
 
         let payload = self.build_payload(messages, is_stream);
         let res = client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(&self.api_url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", self.anthropic_version.clone())
             .header("content-type", "application/json; charset=utf-8")
@@ -176,7 +186,7 @@ impl LLM for Claude {
         let client = Client::new();
         let payload = self.build_payload(messages, true);
         let request = client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(&self.api_url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", &self.anthropic_version)
             .header("content-type", "application/json; charset=utf-8")
@@ -261,7 +271,7 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_cloudia_generate() {
-        let cloudia = Claude::new();
+        let cloudia = Claude::new().unwrap();
 
         let res = cloudia
             .generate(&[Message::new_human_message("Hi, how are you doing")])
@@ -274,7 +284,7 @@ mod tests {
     #[test]
     #[ignore]
     async fn test_cloudia_stream() {
-        let cloudia = Claude::new();
+        let cloudia = Claude::new().unwrap();
         let mut stream = cloudia
             .stream(&[Message::new_human_message("Hi, how are you doing")])
             .await
